@@ -20,10 +20,15 @@ class Plantuml:
     def add_call(self, from_: str, to: str, method_or_attribute: str) -> None:
         message = f"{from_} --> {to}: {method_or_attribute}"
 
+        # weird behavior, introducing a latency when read
         import time
-        time.sleep(0.01)
         content = self._file.read_text()
-        assert content
+
+        while not content:
+            time.sleep(1)
+            print('waiting for content')
+            content = self._file.read_text()
+
         lines = content.splitlines()
 
         if self.END_TAG in lines:
