@@ -6,3 +6,12 @@ plant_uml_convert: # check_grep
 	grep -Pi "startuml|enduml|calc" cacl2.plantuml > cacl2_2.plantuml
 	plantuml cacl2_2.plantuml
 	open .
+
+mypy:
+	mypy --strict --show-error-codes pylant.py
+
+pylint:
+	pylint pylant.py
+
+code_check: mypy pylint
+

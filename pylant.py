@@ -1,8 +1,14 @@
+"""
+plant uml + python -> pylant.py
+"""
+from typing import Any, Tuple, Set, Dict, Union, List, cast
+
+import enum
 import importlib
 import inspect
 import types
+from collections.abc import Hashable
 from pathlib import Path
-from typing import Any, Tuple, Set, Dict, Union
 from unittest import mock
 
 
@@ -15,60 +21,55 @@ class Plantuml:
 
     def __init__(self) -> None:
         self._file = Path(__file__).parent / "sequence.plantuml"
-        self._file.write_text(self.START_TAG)
+        self._content = [self.START_TAG]
 
-    def add_call(self, from_: str, to: str, method_or_attribute: str) -> None:
+    def save(self) -> None:
+        """Dump all calls into a plant uml file"""
+        self._file.write_text("\n".join(self._content + [self.END_TAG]))
+
+    def add_call(self, from_: str, to: str, method_or_attribute: str) -> None:  # pylint: disable=invalid-name
+        """
+        Collect call to draw a sequence diagram later
+        """
         message = f"{from_} --> {to}: {method_or_attribute}"
 
-        # weird behavior, introducing a latency when read
-        import time
-        content = self._file.read_text()
-
-        while not content:
-            time.sleep(1)
-            print('waiting for content')
-            content = self._file.read_text()
-
-        lines = content.splitlines()
-
-        if self.END_TAG in lines:
-            lines = lines[:-1]
-
         # group and increment the same calls
-        if message in lines[-1]:
-            parsed = lines[-1].rsplit(" +", maxsplit=1)
+        last = self._content[-1]
+        if message in last:
+            parsed = last.rsplit(" +", maxsplit=1)
             if len(parsed) == 1:
                 head, count = parsed[0], "1"
             else:
                 head, count = parsed
 
-            lines[-1] = f"{head} +{int(count) + 1}"
+            self._content[-1] = f"{head} +{int(count) + 1}"
         else:
-            lines.append(message)
-
-        if self.END_TAG not in lines:
-            lines.append(self.END_TAG)
-
-        self._file.write_text("\n".join(lines))
+            self._content.append(message)
 
 
 class PlantPatch:
     """
     Patch modules and classes to track each call latter to be included in sequence diagram
     """
-    def __init__(self):
+    def __init__(self) -> None:
         #: map each original api entity by a unique id
         self._original: Dict[str, Union[types.ModuleType, types.FunctionType]] = {}
 
-        self._modules_by_path = {}
+        self._modules_by_path: Dict[str,types.ModuleType] = {}
         self._uml = Plantuml()
         self._patched_classes: Set[Tuple[types.ModuleType, str]] = set()
 
     @staticmethod
     def module_to_uniq_map_id(module: types.ModuleType, method_or_attribute_name: str) -> str:
+        """
+        Convert module and method_or_attribute_name into a unique map id
+        """
         return f"{module.__name__}.{method_or_attribute_name}"
 
     def find_the_caller(self, stack_level: int = 5) -> types.ModuleType:
+        """
+        Find who call the current function
+        """
         # keep all operation apart for a debugging purposes
         stack = inspect.stack()
         from_frame = stack[stack_level]
@@ -85,21 +86,27 @@ class PlantPatch:
 
         return self._modules_by_path[module_path]
 
-    def locate_all_modules(self, *modules: types.ModuleType, ignore_modules=None):
+    def locate_all_modules(self, *modules: types.ModuleType,  # pylint: disable=too-many-locals
+                           ignore_modules: List[str]) -> List[types.ModuleType]:
+        """Search recursive for the all modules"""
         all_modules = list(modules)
         for module in modules:
             nest_count = len(module.__name__.split('.'))
-            package = Path(module.__file__).parent
+            path = cast(str, module.__file__)
+            package = Path(path).parent
             if package.joinpath("__init__.py").exists():
                 sub_packages = list(package.glob("./*/__init__.py"))
                 for sub_package in sub_packages:
-                    import_str = ".".join(str(sub_package.parent).rsplit("/", maxsplit=nest_count + 1)[1:])
+                    pack = str(sub_package.parent).rsplit("/", maxsplit=nest_count + 1)
+                    import_str = ".".join(pack[1:])
 
                     if import_str in ignore_modules:
                         continue
 
                     sub_module = importlib.import_module(import_str)
-                    all_modules.extend(self.locate_all_modules(sub_module, ignore_modules=ignore_modules))
+                    all_modules.extend(
+                        self.locate_all_modules(sub_module, ignore_modules=ignore_modules)
+                    )
 
                     sibling_modules = []
                     for python_file in sub_package.parent.glob("*.py"):
@@ -107,7 +114,8 @@ class PlantPatch:
                         if python_file == sub_package:
                             continue
 
-                        import_str = ".".join(str(python_file)[:-3].rsplit("/", maxsplit=nest_count + 2)[1:])
+                        pack = str(python_file)[:-3].rsplit("/", maxsplit=nest_count + 2)
+                        import_str = ".".join(pack[1:])
 
                         if import_str in ignore_modules:
                             continue
@@ -118,14 +126,49 @@ class PlantPatch:
 
         for ignore_module_name in ignore_modules:
             ignore_module = importlib.import_module(ignore_module_name)
-            self._modules_by_path[ignore_module.__file__] = ignore_module
+            path = cast(str, ignore_module.__file__)
+            self._modules_by_path[path] = ignore_module
 
         return all_modules
 
-    def patch_modules(self, *modules: types.ModuleType):
+    def _patch_functions(self,
+                         module: types.ModuleType,
+                         real_module: types.ModuleType,
+                         function: types.FunctionType,
+                         name: str) -> None:
+        # check if module item is a function
+
+        uniq_map_id = self.module_to_uniq_map_id(real_module, name)
+
+        self._original[uniq_map_id] = function
+
+        def _wrapper(*args: Any,
+                     x_module: types.ModuleType = real_module,
+                     x_method_or_attribute_name: str = name,
+                     x_uniq_map_id: str = uniq_map_id,
+                     **kwargs: Any) -> Any:
+            """
+            x_method_or_attribute_name: method_or_attribute_name_
+            https://stackoverflow.com/questions/3431676/creating-functions-in-a-loop
+            """
+            assert x_module
+
+            from_name = self.find_the_caller().__name__
+
+            self._uml.add_call(from_name, x_module.__name__, x_method_or_attribute_name)
+
+            return self._original[x_uniq_map_id].__call__(*args, **kwargs)
+
+        mock.patch.object(module, name, side_effect=_wrapper).start()
+
+    def patch_modules(self, *modules: types.ModuleType) -> None:  # pylint: disable=too-many-branches
+        """
+        From the modules find classes and function and patch them
+        """
         our_modules = {module.__name__ for module in modules}
         for module in modules:
-            self._modules_by_path[module.__file__] = module
+            path = cast(str, module.__file__)
+            self._modules_by_path[path] = module
 
             for method_or_attribute_name in dir(module):
                 # is a constant
@@ -142,21 +185,20 @@ class PlantPatch:
                 if hasattr(module_item, '__name__'):
                     entity_name = module_item.__name__
                     if entity_name == 'SomeClassName':
-                        debug = 1
+                        debug = 1  # pylint: disable=unused-variable
 
-                real_module = inspect.getmodule(module_item)
+                real_module = cast(types.ModuleType, inspect.getmodule(module_item))
 
                 # check if module item is a class
                 if isinstance(module_item, type):
                     # not implemented yet
-                    import enum
+
                     if issubclass(module_item, enum.Enum):
                         continue
 
                     if issubclass(module_item, (Exception, BaseException)):
                         continue
 
-                    from collections.abc import Hashable
                     if module_item.__base__ is Hashable:
                         continue
 
@@ -171,27 +213,13 @@ class PlantPatch:
 
                     continue
 
-                # check if module item is a class
+                # check if module item is a function
                 if isinstance(module_item, types.FunctionType):
-                    uniq_map_id = self.module_to_uniq_map_id(real_module, method_or_attribute_name)
-
-                    self._original[uniq_map_id] = module_item
-
-                    def _wrapper(*args, x_module=real_module,
-                                 x_method_or_attribute_name=method_or_attribute_name,
-                                 x_uniq_map_id=uniq_map_id,
-                                 **kwargs):
-                        """
-                        x_method_or_attribute_name: method_or_attribute_name_
-                        https://stackoverflow.com/questions/3431676/creating-functions-in-a-loop
-                        """
-                        from_name = self.find_the_caller().__name__
-
-                        self._uml.add_call(from_name, x_module.__name__, x_method_or_attribute_name)
-
-                        return self._original[x_uniq_map_id].__call__(*args, **kwargs)
-
-                    mock.patch.object(module, method_or_attribute_name, side_effect=_wrapper).start()
+                    self._patch_functions(
+                        module=module,
+                        real_module=real_module,
+                        function=module_item,
+                        name=method_or_attribute_name)
 
                     continue
 
@@ -199,7 +227,13 @@ class PlantPatch:
                 if isinstance(module_item, (int, str, float, types.ModuleType, Path)):
                     continue
 
-    def patch_classes(self, *classes: Tuple[types.ModuleType, str]):
+    def patch_classes(self, *classes: Tuple[types.ModuleType, str]) -> None:
+        """
+        Patch provided classes:
+
+        1. wrap init
+        2. add __getattribute__ method
+        """
         for module_to_patch, class_name in classes:
             if (module_to_patch, class_name) in self._patched_classes:
                 continue
@@ -211,13 +245,15 @@ class PlantPatch:
             # https://www.geeksforgeeks.org/create-classes-dynamically-in-python/
             class_value = getattr(module_to_patch, class_name)
 
-            def __init__(self_, *args, x_class_value: type = class_value, **kwargs) -> None:
+            def __init__(self_: Any, *args: Any,
+                         x_class_value: type = class_value,
+                         **kwargs: Any) -> None:
 
                 from_name = self.find_the_caller(stack_level=5).__name__
                 self._uml.add_call(from_name, x_class_value.__qualname__, '__init__')
-                x_class_value.__init__(self_, *args, **kwargs)
+                x_class_value.__init__(self_, *args, **kwargs)  # type: ignore[misc]
 
-            def __getattribute__(self_, name: str, x_class_value: type = class_value) -> Any:
+            def __getattribute__(self_: Any, name: str, x_class_value: type = class_value) -> Any:
                 from_name = self.find_the_caller(stack_level=2).__name__
                 self._uml.add_call(from_name, x_class_value.__qualname__, name)
 
@@ -234,3 +270,7 @@ class PlantPatch:
             })
 
             mock.patch.object(module_to_patch, class_name, side_effect=the_class).start()
+
+    def save(self) -> None:
+        """Dump all calls into a plant uml file"""
+        self._uml.save()
