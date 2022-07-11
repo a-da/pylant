@@ -99,7 +99,7 @@ Patch
                     "__getattribute__": __getattribute__
                 })
 
-                mock.patch.object(module_to_patch, class_name, side_effect=the_class).start()
+                setattr(module_to_patch, class_name, the_class)
 
 
 3. patch workflow
@@ -150,6 +150,11 @@ Patch
     Plugin in IDE PlantUml.
 
     Command Line in makefile.
+
+Real example
+============
+
+See a real example of use in `<./example.d/README.rst>`_.
 
 TO be done
 ==========

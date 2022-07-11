@@ -19,12 +19,13 @@ class Plantuml:
     START_TAG = "@startuml"
     END_TAG = "@enduml"
 
-    def __init__(self) -> None:
-        self._file = Path(__file__).parent / "sequence.plantuml"
+    def __init__(self, store_directory: Path) -> None:
+        self._file = store_directory / "sequence.plantuml"
         self._content = [self.START_TAG]
 
     def save(self) -> None:
         """Dump all calls into a plant uml file"""
+        print(f'Save calls to {self._file}')
         self._file.write_text("\n".join(self._content + [self.END_TAG]))
 
     def add_call(self, from_: str, to: str, method_or_attribute: str) -> None:  # pylint: disable=invalid-name
@@ -51,12 +52,12 @@ class PlantPatch:
     """
     Patch modules and classes to track each call latter to be included in sequence diagram
     """
-    def __init__(self) -> None:
+    def __init__(self, store_directory: Path) -> None:
         #: map each original api entity by a unique id
         self._original: Dict[str, Union[types.ModuleType, types.FunctionType]] = {}
 
-        self._modules_by_path: Dict[str,types.ModuleType] = {}
-        self._uml = Plantuml()
+        self._modules_by_path: Dict[str, types.ModuleType] = {}
+        self._uml = Plantuml(store_directory)
         self._patched_classes: Set[Tuple[types.ModuleType, str]] = set()
 
     @staticmethod
@@ -76,7 +77,7 @@ class PlantPatch:
         module_path = from_frame[1]
 
         count = 0
-        while "/lib/python" in module_path:
+        while module_path not in self._modules_by_path:
             stack_level += 1
             from_frame = stack[stack_level]
             module_path = from_frame[1]
@@ -85,6 +86,24 @@ class PlantPatch:
                 raise NotImplementedError('Infinite loop detected')
 
         return self._modules_by_path[module_path]
+
+    @staticmethod
+    def _locate_simpling_module(module: Path, nest_count: int, ignore_modules: List):
+        siblings = []
+        for python_file in module.glob("*.py"):
+            # ignore __init__.py
+            if str(python_file).endswith('__init__.py'):
+                continue
+
+            pack = str(python_file)[:-3].rsplit("/", maxsplit=nest_count + 2)
+            import_str = ".".join(pack[1:])
+
+            if import_str in ignore_modules:
+                continue
+
+            siblings.append(importlib.import_module(import_str))
+        return siblings
+
 
     def locate_all_modules(self, *modules: types.ModuleType,  # pylint: disable=too-many-locals
                            ignore_modules: List[str]) -> List[types.ModuleType]:
@@ -108,21 +127,11 @@ class PlantPatch:
                         self.locate_all_modules(sub_module, ignore_modules=ignore_modules)
                     )
 
-                    sibling_modules = []
-                    for python_file in sub_package.parent.glob("*.py"):
-                        # ignore __init__.py
-                        if python_file == sub_package:
-                            continue
-
-                        pack = str(python_file)[:-3].rsplit("/", maxsplit=nest_count + 2)
-                        import_str = ".".join(pack[1:])
-
-                        if import_str in ignore_modules:
-                            continue
-
-                        sibling_modules.append(importlib.import_module(import_str))
-
+                    sibling_modules = self._locate_simpling_module(sub_package.parent, nest_count, ignore_modules)
                     all_modules.extend(sibling_modules)
+
+                sibling_modules = self._locate_simpling_module(package, nest_count - 1, ignore_modules)
+                all_modules.extend(sibling_modules)
 
         for ignore_module_name in ignore_modules:
             ignore_module = importlib.import_module(ignore_module_name)
@@ -269,7 +278,21 @@ class PlantPatch:
                 "__getattribute__": __getattribute__
             })
 
-            mock.patch.object(module_to_patch, class_name, side_effect=the_class).start()
+            if 'Rule' in proxy_class_name:
+                debug = 1
+                # a = the_class(name='a', selector='xpath', type_list_=['+1'])
+                # the_class.from_list([])
+                # mock.patch.object(module_to_patch, class_name,
+                #                   spec=True,
+                #                   # new_callable=the_class,
+                #                   side_effect=the_class
+                #                   ).start()
+                # import ciur.shortcuts
+                # ciur.shortcuts.Rule = the_class
+                # ciur.shortcuts.Rule.from_list([])
+
+            setattr(module_to_patch, class_name, the_class)
+            # mock.patch.object(module_to_patch, class_name, side_effect=the_class).start()
 
     def save(self) -> None:
         """Dump all calls into a plant uml file"""

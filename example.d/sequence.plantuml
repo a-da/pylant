@@ -1,0 +1,100 @@
+@startuml
+__main__ --> __main__: main_example
+__main__ --> ciur: open_file
+ciur --> ciur: path
+__main__ --> ciur.shortcuts: pretty_parse_from_resources
+ciur.shortcuts --> ciur.helpers: is_url +2
+__main__ --> Document: __init__
+ciur.shortcuts --> ciur.shortcuts: pretty_parse_from_document
+ciur.shortcuts --> Document: namespace
+ciur.shortcuts --> ciur.bnf_parser: external2dict
+ciur.bnf_parser --> ciur.bnf_parser: external2list
+ciur.bnf_parser --> ciur.bnf_parser: _get_bnf
+ciur.bnf_parser --> pyparsing: oneOf
+ciur.bnf_parser --> ciur.bnf_parser: _type_list
+ciur.bnf_parser --> pyparsing: delimitedList
+ciur.bnf_parser --> pyparsing: col +2
+ciur.bnf_parser --> ciur.bnf_parser: _check_peer_indent
+ciur.bnf_parser --> pyparsing: col +2
+ciur.bnf_parser --> ciur.bnf_parser: _check_peer_indent
+ciur.bnf_parser --> pyparsing: col
+ciur.bnf_parser --> ciur.bnf_parser: _check_peer_indent
+ciur.bnf_parser --> pyparsing: col
+ciur.bnf_parser --> ciur.bnf_parser: ensure_unicode_provision +20
+ciur.bnf_parser --> ciur.bnf_parser: _list_grammar2dict_list +2
+ciur.shortcuts --> ListOfT: __init__
+ciur.rule --> Rule: __init__
+ciur.rule --> Rule: __class__
+ciur.rule --> Rule: rule +2
+ciur.rule --> Rule: _2complex
+ciur.rule --> Rule: __init__
+ciur.rule --> Rule: __class__
+ciur.rule --> Rule: rule +2
+ciur.rule --> Rule: _2complex
+ciur.rule --> Rule: __init__
+ciur.rule --> Rule: __class__
+ciur.rule --> Rule: rule +2
+ciur.rule --> Rule: _2complex
+ciur.shortcuts --> Document: doctype
+ciur.shortcuts --> ciur.parse: html_type
+ciur.parse --> Document: content
+ciur.parse --> Document: namespace
+ciur.parse --> Document: url
+ciur.parse --> ciur.parse: _prepare_context
+ciur.parse --> ciur.parse: _recursive_parse
+ciur.parse --> ciur.parse: _evaluate_xpath
+ciur.parse --> Rule: selector
+ciur.parse --> Rule: selector_type
+ciur.parse --> ciur.parse: _stretch
+ciur.parse --> Rule: type_list
+ciur.parse --> ciur.parse: _type_list_casting
+ciur.parse --> Rule: rule +2
+ciur.parse --> ciur.parse: _recursive_parse
+ciur.parse --> ciur.parse: _evaluate_xpath
+ciur.parse --> Rule: selector
+ciur.parse --> Rule: selector_type
+ciur.parse --> ciur.parse: _stretch
+ciur.parse --> Rule: type_list
+ciur.parse --> ciur.parse: _type_list_casting
+ciur.parse --> ciur.parse: _stretch
+ciur.parse --> Rule: name
+ciur.parse --> ciur.parse: _is_dict
+ciur.parse --> Rule: type_list
+ciur.parse --> ciur.parse: _size_match_assert
+ciur.parse --> ciur.xpath_functions_ciur: size_
+ciur.parse --> Rule: name
+ciur.parse --> ciur.parse: _is_list
+ciur.parse --> ciur.parse: _shrink +2
+ciur.parse --> Rule: rule
+ciur.parse --> Rule: name +2
+ciur.parse --> ciur.parse: _recursive_parse
+ciur.parse --> ciur.parse: _evaluate_xpath
+ciur.parse --> Rule: selector
+ciur.parse --> Rule: selector_type
+ciur.parse --> ciur.parse: _stretch
+ciur.parse --> Rule: type_list
+ciur.parse --> ciur.parse: _type_list_casting
+ciur.parse --> ciur.parse: _stretch
+ciur.parse --> Rule: name
+ciur.parse --> ciur.parse: _is_dict
+ciur.parse --> Rule: type_list
+ciur.parse --> ciur.parse: _size_match_assert
+ciur.parse --> ciur.xpath_functions_ciur: size_
+ciur.parse --> Rule: name
+ciur.parse --> ciur.parse: _is_list
+ciur.parse --> ciur.parse: _shrink +2
+ciur.parse --> Rule: rule
+ciur.parse --> Rule: name +2
+ciur.parse --> ciur.parse: _stretch
+ciur.parse --> Rule: name
+ciur.parse --> ciur.parse: _is_dict
+ciur.parse --> Rule: type_list
+ciur.parse --> ciur.parse: _size_match_assert
+ciur.parse --> ciur.xpath_functions_ciur: size_
+ciur.parse --> Rule: name
+ciur.parse --> ciur.parse: _is_list
+ciur.parse --> ciur.parse: _shrink +2
+ciur.parse --> Rule: rule
+ciur.parse --> Rule: name +2
+ciur.shortcuts --> ciur: pretty_json
+@enduml
