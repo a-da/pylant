@@ -1,3 +1,5 @@
+In this example we will trace workflow from a scrapper implementation https://bitbucket.org/ada/python-ciur/src/python3.9-ciur/.
+
 1. Install plantuml
 
 .. code-block:: bash
@@ -66,4 +68,8 @@
     $ du -h *.svg
     60K    sequence.svg
 
+4. Analyze the image
 
+.. raw:: html
+
+    <object data="sequence.svg" type="image/svg+xml"></object>
