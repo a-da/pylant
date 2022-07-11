@@ -70,6 +70,4 @@ In this example we will trace workflow from a scrapper implementation https://bi
 
 4. Analyze the image
 
-.. raw:: html
-
-    <object data="sequence.svg" type="image/svg+xml"></object>
+.. image:: sequence.svg
